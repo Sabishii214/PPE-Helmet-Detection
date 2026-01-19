@@ -1,0 +1,9 @@
+path: /workspace/PPE_Dataset
+train: train/images
+val: valid/images
+test: test/images
+
+names:
+  0: helmet
+  1: head
+  2: person
