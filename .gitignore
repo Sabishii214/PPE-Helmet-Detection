@@ -4,8 +4,8 @@ PPE_Dataset/
 raw_data/
 yolov8*.pt
 output/train/weights
-README.md
 PPE_Helmet_Detection.py
 yolo26n.pt
 runs/
 __pycache__/
+analytic.py
