@@ -8,4 +8,5 @@ PPE_Helmet_Detection.py
 yolo26n.pt
 runs/
 __pycache__/
+.venv/
 analytic.py

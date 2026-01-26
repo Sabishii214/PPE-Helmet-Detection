@@ -81,15 +81,22 @@ def evaluate_model(model_path=None):
         'model_path': model_path
     }
 
-def generate_performance_report(results, output_file='performance_report.txt'):
+def generate_performance_report(results, output_file=None):
     """
     Generate detailed performance report
     
     Args:
         results: Dictionary from evaluate_model()
-        output_file: Output file path
+        output_file: Output file path (if None, saves to model's run directory)
     """
     from config import OUTPUT_DIR
+    
+    # Determine output path from model path if not specified
+    if output_file is None:
+        model_path = Path(results['model_path'])
+        # Get the run directory (e.g., output/train5)
+        run_dir = model_path.parent.parent
+        output_file = run_dir / 'performance_report.txt'
     
     metrics = results['metrics']
     test_results = results['test_results']
@@ -103,8 +110,8 @@ def generate_performance_report(results, output_file='performance_report.txt'):
 {'='*70}
 
 MODEL CONFIGURATION:
-- Architecture: YOLOv8l (Large)
-- Image Size: 640x640
+- Architecture: YOLOv8m
+- Image Size: 768x768
 - Confidence Threshold: {TEST_CONFIG['conf']}
 
 DATASET:
@@ -135,52 +142,6 @@ MODEL LOCATION: {results['model_path']}
     
     return report
 
-def compare_with_benchmarks(results, output_file='comparison_report.txt'):
-    """
-    Compare model performance with benchmark models
-    
-    Args:
-        results: Dictionary from evaluate_model()
-        output_file: Output file path
-    """
-    map50 = results['metrics']['map50']
-    
-    # Benchmark comparison data (Architecture stats only)
-    comparison_data = {
-        'Model': [
-            'Faster R-CNN ResNet50',
-            'RetinaNet ResNet50',
-            'EfficientDet-D0',
-            'DETR ResNet50',
-            'Your Model (YOLOv8l)'
-        ],
-        'Year': [2017, 2018, 2020, 2020, 2024],
-        'Parameters (M)': [41.8, 36.3, 3.9, 41.3, 43.7],
-        'Size (MB)': [167, 145, 15.6, 165, 87.6]
-    }
-    
-    df = pd.DataFrame(comparison_data)
-    
-    # Generate report
-    report = f"""MODEL COMPARISON REPORT
-{'='*70}
-
-YOUR MODEL:
-- Architecture: YOLOv8l
-- mAP50: {map50*100:.2f}%
-- Parameters: 43.7M
-- Model Size: 87.6 MB
-
-BENCHMARK COMPARISON:
-{df.to_string(index=False)}
-{'='*70}
-"""
-    
-    Path(output_file).write_text(report)
-    print(f"Comparison report saved: {output_file}")
-    
-    return report
-
 def test_and_report(model_path=None):
     """
     Main function to test model and generate all reports
@@ -193,14 +154,12 @@ def test_and_report(model_path=None):
     
     # Generate reports
     generate_performance_report(results)
-    compare_with_benchmarks(results)
     
     print("\n" + "="*60)
     print("EVALUATION COMPLETE")
     print("="*60)
     print("Reports generated:")
     print("  - performance_report.txt")
-    print("  - comparison_report.txt")
     print("="*60 + "\n")
 
 if __name__ == "__main__":

@@ -1,7 +1,8 @@
 """
 Model export and optimization utilities
-Export trained model to different formats (ONNX, TorchScript)
+Export trained model to different formats
 """
+import argparse
 import time
 import torch
 from pathlib import Path
@@ -43,7 +44,7 @@ def export_model(model_path=None, force=False):
         trt_available = True
         print("TensorRT library detected.")
     except ImportError:
-        print("TensorRT not detected. Skipping .engine export.")
+        print("TensorRT not detected. (Required for NEW .engine export and benchmarks)")
 
     model = None
 
@@ -54,23 +55,28 @@ def export_model(model_path=None, force=False):
         return model
 
     # 1. Export to TensorRT (FP16)
-    if trt_available:
-        if not force and expected_paths['engine'].exists():
-            print(f"Skipping TensorRT export: {expected_paths['engine']} already exists.")
-            results['engine'] = str(expected_paths['engine'])
-        else:
-            print("\nExporting to TensorRT (FP16)...")
-            try:
-                engine_path = get_model().export(
-                    format='engine', 
-                    dynamic=True, 
-                    half=True, 
-                    device=0, 
-                    batch=TRAINING_CONFIG['batch']
-                )
-                results['engine'] = engine_path
-            except Exception as e:
-                print(f"Warning: TensorRT export failed: {e}")
+    if not force and expected_paths['engine'].exists():
+        print(f"TensorRT engine already exists: {expected_paths['engine']}")
+        results['engine'] = str(expected_paths['engine'])
+    elif trt_available:
+        print("\nExporting to TensorRT (FP16)...")
+        try:
+            # get_model() uses training config batch size for engine export
+            engine_path = get_model().export(
+                format='engine', 
+                dynamic=True, 
+                half=True, 
+                device=0, 
+                batch=TRAINING_CONFIG['batch']
+            )
+            results['engine'] = engine_path
+        except Exception as e:
+            print(f"Warning: TensorRT export failed: {e}")
+            results['engine_error'] = str(e)
+    else:
+        results['engine_error'] = "TensorRT library not installed"
+        if force:
+            print(f"Cannot force TensorRT export: {results['engine_error']}")
 
     # 2. Export to ONNX (FP16)
     if not force and expected_paths['onnx'].exists():
@@ -83,6 +89,7 @@ def export_model(model_path=None, force=False):
             results['onnx'] = onnx_path
         except Exception as e:
             print(f"Warning: ONNX export failed: {e}")
+            results['onnx_error'] = str(e)
     
     # 3. Export to TorchScript
     if not force and expected_paths['torchscript'].exists():
@@ -95,6 +102,7 @@ def export_model(model_path=None, force=False):
             results['torchscript'] = torchscript_path
         except Exception as e:
             print(f"Warning: TorchScript export failed: {e}")
+            results['torchscript_error'] = str(e)
     
     return results
 
@@ -157,8 +165,11 @@ def benchmark_inference_speed(model_path=None, onnx_path=None, engine_path=None,
     # Benchmark TensorRT (Engine)
     if engine_path and Path(engine_path).exists():
         try:
+            import tensorrt
             trt_model = YOLO(engine_path)
             results['engine_ms'], results['engine_fps'] = run_benchmark(trt_model, "TensorRT (FP16)")
+        except ImportError:
+            print("TensorRT library not found. Skipping engine benchmark.")
         except Exception as e:
             print(f"TensorRT benchmark failed: {e}")
     
@@ -185,28 +196,52 @@ def benchmark_inference_speed(model_path=None, onnx_path=None, engine_path=None,
     return results
 
 def generate_optimization_report(export_paths, benchmark_results, 
-                                 output_file='optimization_report.txt'):
+                                 output_file=None, model_path=None):
     """
     Generate detailed optimization report
+    
+    Args:
+        export_paths: Dictionary of exported model paths
+        benchmark_results: Dictionary of benchmark results
+        output_file: Output file path (if None, saves to model's run directory)
+        model_path: Path to the model (used to determine run directory)
     """
-    # Build list of exported formats, excluding those not present
+    # Determine output path from model path if not specified
+    if output_file is None and model_path:
+        model_path = Path(model_path)
+        # Get the run directory (e.g., output/train5)
+        run_dir = model_path.parent.parent
+        output_file = run_dir / 'optimization_report.txt'
+    elif output_file is None:
+        output_file = 'optimization_report.txt'
+    
+    # Build list of exported formats with status indicators
     exported_formats = []
-    if export_paths.get('engine'):
-        exported_formats.append(f"- TensorRT (FP16): {export_paths['engine']}")
-    if export_paths.get('onnx'):
-        exported_formats.append(f"- ONNX (FP16): {export_paths['onnx']}")
-    if export_paths.get('torchscript'):
-        exported_formats.append(f"- TorchScript: {export_paths['torchscript']}")
+    
+    # helper for formatting lines
+    def format_export_line(name, label, path_key):
+        if export_paths.get(path_key):
+            return f"- {label}: {export_paths[path_key]}"
+        elif f"{path_key}_error" in export_paths:
+            return f"- {label}: ERR ({export_paths[f'{path_key}_error']})"
+        else:
+            return f"- {label}: N/A"
 
-    # Build list of inference speeds, excluding N/A
+    exported_formats.append(format_export_line('engine', 'TensorRT (FP16)', 'engine'))
+    exported_formats.append(format_export_line('onnx', 'ONNX (FP16)', 'onnx'))
+    exported_formats.append(format_export_line('torchscript', 'TorchScript', 'torchscript'))
+
+    # Build list of inference speeds, including Failed/Skipped status
     inference_speeds = []
-    def format_line(name, results):
+    def format_speed_line(name, label, results):
         if f'{name}_ms' in results:
-            return f"- {name}: {results[f'{name}_ms']:.2f} ms/image ({results[f'{name}_fps']:.1f} FPS)"
+            return f"- {label}: {results[f'{name}_ms']:.2f} ms/image ({results[f'{name}_fps']:.1f} FPS)"
+        elif name == 'engine':
+            return f"- {label}: N/A"
         return None
 
-    for name in ['pytorch', 'onnx', 'engine']:
-        line = format_line(name, benchmark_results)
+    for name, label in [('pytorch', 'PyTorch (FP32)'), ('onnx', 'ONNX (FP16)'), ('engine', 'TensorRT (FP16)')]:
+        line = format_speed_line(name, label, benchmark_results)
         if line:
             inference_speeds.append(line)
 
@@ -231,15 +266,16 @@ def generate_optimization_report(export_paths, benchmark_results,
     print(f"\nOptimization report saved: {output_file}")
 
 
-def export_and_optimize(model_path=None):
+def export_and_optimize(model_path=None, force=False):
     """
     Main function to export and optimize model
     
     Args:
         model_path: Path to trained model weights
+        force: Force re-export even if files exist
     """
     # Export model
-    export_paths = export_model(model_path)
+    export_paths = export_model(model_path, force=force)
     
     # Benchmark
     benchmark_results = benchmark_inference_speed(
@@ -250,7 +286,7 @@ def export_and_optimize(model_path=None):
     
     # Generate report
     if benchmark_results:
-        generate_optimization_report(export_paths, benchmark_results)
+        generate_optimization_report(export_paths, benchmark_results, model_path=model_path)
     
     print("\n" + "="*60)
     print("EXPORT AND OPTIMIZATION COMPLETE")

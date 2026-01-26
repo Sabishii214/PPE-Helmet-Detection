@@ -56,6 +56,9 @@ def run_full_pipeline():
         best_path = get_latest_model_path('best')
         last_path = get_latest_model_path('last')
         
+        # Get the run directory for reports
+        run_dir = best_path.parent.parent
+        
         print("\n" + "="*70)
         print(" "*15 + "PIPELINE COMPLETED SUCCESSFULLY!")
         print("="*70)
@@ -64,12 +67,11 @@ def run_full_pipeline():
         print(f"     - {best_path}")
         print(f"     - {last_path}")
         print("Reports:")
-        print("     - performance_report.txt")
-        print("     - comparison_report.txt")
-        print("     - optimization_report.txt")
+        print(f"     - {run_dir}/performance_report.txt")
+        print(f"     - {run_dir}/optimization_report.txt")
         print("Visualizations:")
-        print("     - dataset_samples.png")
-        print("     - test_predictions.png")
+        print(f"     - output/visualizations/dataset_samples_*.png")
+        print(f"     - {run_dir}/test_predictions.png")
         print("="*70 + "\n")
         
     except Exception as e:

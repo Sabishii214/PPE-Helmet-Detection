@@ -8,8 +8,6 @@ def check_checkpoint(path):
         return False
     
     try:
-        # We use map_location='cpu' and weights_only=False to be thorough
-        # In a real environment we'd use YOLO(path) but this is a low-level check
         torch.load(path, map_location='cpu', weights_only=False)
         print("SUCCESS: Checkpoint is valid.")
         return True

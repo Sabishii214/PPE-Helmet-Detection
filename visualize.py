@@ -45,15 +45,24 @@ def draw_boxes(img_path, label_path):
     return img
 
 
-def visualize_dataset_samples(split='train', num_samples=4, save_path='dataset_samples.png'):
+def visualize_dataset_samples(split='train', num_samples=4, save_path=None):
     """
     Visualize random samples from dataset
     
     Args:
         split: Dataset split ('train', 'valid', or 'test')
         num_samples: Number of samples to visualize
-        save_path: Path to save visualization
+        save_path: Path to save visualization (if None, saves to output/visualizations with timestamp)
     """
+    from datetime import datetime
+    
+    # Determine output path if not specified
+    if save_path is None:
+        viz_dir = Path('output') / 'visualizations'
+        viz_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        save_path = viz_dir / f'dataset_samples_{split}_{timestamp}.png'
+    
     print(f"\nVisualizing {num_samples} samples from {split} set...")
     
     samples = list((OUTPUT_DIR / split / 'images').glob('*.png'))[:num_samples]
@@ -88,16 +97,16 @@ def visualize_dataset_samples(split='train', num_samples=4, save_path='dataset_s
 
 
 def visualize_predictions(model, split='test', num_samples=8, 
-                         conf_threshold=0.3, save_path='test_predictions.png'):
+                         conf_threshold=0.3, save_path=None):
     """
     Visualize model predictions on test images
     
     Args:
-        model: Trained YOLO model
+        model: Trained YOLO model or path to model
         split: Dataset split to use
         num_samples: Number of samples to visualize
         conf_threshold: Confidence threshold for predictions
-        save_path: Path to save visualization
+        save_path: Path to save visualization (if None, saves to model's run directory)
     """
     from ultralytics import YOLO
     
@@ -107,6 +116,16 @@ def visualize_predictions(model, split='test', num_samples=8,
         else:
             model_path = model
         model = YOLO(model_path)
+    else:
+        # If model is already loaded, try to get path from it
+        model_path = getattr(model, 'ckpt_path', None) or get_latest_model_path('best')
+    
+    # Determine output path if not specified
+    if save_path is None:
+        model_path = Path(model_path)
+        # Get the run directory (e.g., output/train5)
+        run_dir = model_path.parent.parent
+        save_path = run_dir / f'{split}_predictions.png'
     
     print(f"\nVisualizing predictions on {num_samples} {split} images...")
     
@@ -124,8 +143,9 @@ def visualize_predictions(model, split='test', num_samples=8,
     colors = VIZ_CONFIG['colors']
     
     for idx, img_path in enumerate(test_images):
-        # Run prediction
-        result = model(str(img_path), conf=conf_threshold, verbose=False, save=False)[0]
+        # Run prediction (specify project to avoid creating 'runs' folder)
+        # Using a temporary project/name that we can ignore or clean up, or directing to output
+        result = model(str(img_path), conf=conf_threshold, verbose=False, save=False, project='output/visualizations', name='temp')[0]
         
         # Load and convert image
         img = cv2.imread(str(img_path))

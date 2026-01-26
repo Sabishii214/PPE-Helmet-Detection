@@ -32,7 +32,7 @@ LOG_FILE="logs/training_${TIMESTAMP}.log"
 echo "Starting training..."
 
 # Run the training script with logging
-python3 PPE_Helmet_Detection.py 2>&1 | tee "$LOG_FILE"
+python3 main.py --step train 2>&1 | tee "$LOG_FILE"
 
 # Check exit status
 if [ $? -eq 0 ]; then
@@ -41,7 +41,7 @@ if [ $? -eq 0 ]; then
     echo ""
     echo "Results saved in:"
     echo "  - Model: output/train/weights/best.pt"
-    echo "  - Reports: performance_report.txt, comparison_report.txt"
+    echo "  - Reports: performance_report.txt"
     echo "  - Log: $LOG_FILE"
 else
     echo ""

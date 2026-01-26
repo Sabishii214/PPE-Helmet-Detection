@@ -2,6 +2,7 @@
 Configuration file for PPE Helmet Detection
 Contains all paths, classes, and training hyperparameters
 """
+import torch
 from pathlib import Path
 
 # Dataset paths
@@ -20,28 +21,27 @@ TEST_SPLIT = 0.15
 
 # Training hyperparameters
 TRAINING_CONFIG = {
-    'model': 'yolov8l.pt',
-    'epochs': 200,
-    'imgsz': 640,
+    'model': 'yolov8m.pt',
+    'epochs': 130,
+    'imgsz': 768,
     'batch': 16,
-    'device': 0,  # GPU device (0 for first GPU, 'cpu' for CPU)
-    'workers': 0,
-    'patience': 30,
+    'device': 0 if torch.cuda.is_available() else 'cpu',  # Auto-detect GPU/CPU
+    'workers': 4,
+    'patience': 25,
     'save': True,
     'plots': True,
     
     # Data augmentation
     'hsv_h': 0.02,
-    'hsv_s': 0.8,
-    'hsv_v': 0.5,
+    'hsv_s': 0.6,
+    'hsv_v': 0.4,
     'degrees': 15,
     'mixup': 0.1,
-    'copy_paste': 0.1,
-    'translate': 0.15,
+    'translate': 0.1,
     'scale': 0.7,
     'flipud': 0.0,
     'fliplr': 0.5,
-    'mosaic': 1.0,
+    'mosaic': 0.9,
     
     # Optimizer
     'optimizer': 'AdamW',
@@ -51,11 +51,16 @@ TRAINING_CONFIG = {
     'lrf': 0.01,
     'warmup_epochs': 3,
     'warmup_momentum': 0.8,
+
+    # Stability
+    'label_smoothing': 0.05,
+    'cache': True,
+    'seed': 42,
 }
 
 # Testing configuration
 TEST_CONFIG = {
-    'conf': 0.2,  # Confidence threshold
+    'conf': 0.25,  # Confidence threshold
     'split': 'test',
 }
 
@@ -75,22 +80,25 @@ def get_latest_model_path(model_type='best'):
     Returns:
         Path object to model weights, or default fallback path
     """
-    output_dirs = [Path('/workspace') / PROJECT_DIR, Path(PROJECT_DIR)]
-    
-    for base_dir in output_dirs:
-        # Check train/weights first (main training output)
-        weights_path = base_dir / 'train' / 'weights' / f'{model_type}.pt'
-        if weights_path.exists():
-            return weights_path
-            
-        # Fallback to checking any train* directory if legacy structure exists
-        if base_dir.exists():
-            train_dirs = [d for d in base_dir.glob('train*') if d.is_dir()]
-            if train_dirs:
-                latest_run = max(train_dirs, key=lambda p: p.stat().st_mtime)
-                weights_path = latest_run / 'weights' / f'{model_type}.pt'
-                if weights_path.exists():
-                    return weights_path
+    # Direct check first
+    weights_path = Path(PROJECT_DIR) / 'train' / 'weights' / f'{model_type}.pt'
+    if weights_path.exists():
+        return weights_path
+        
+    # Check /workspace if in Docker
+    weights_path_docker = Path('/workspace') / PROJECT_DIR / 'train' / 'weights' / f'{model_type}.pt'
+    if weights_path_docker.exists():
+        return weights_path_docker
+
+    # Local fallback search
+    base_dir = Path(PROJECT_DIR)
+    if base_dir.exists():
+        train_dirs = [d for d in base_dir.glob('train*') if d.is_dir()]
+        if train_dirs:
+            latest_run = max(train_dirs, key=lambda p: p.stat().st_mtime)
+            weights_path = latest_run / 'weights' / f'{model_type}.pt'
+            if weights_path.exists():
+                return weights_path
 
     # Default fallback
     return Path(PROJECT_DIR) / 'train' / 'weights' / f'{model_type}.pt'
