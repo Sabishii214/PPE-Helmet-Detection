@@ -354,16 +354,12 @@ docker exec gpu-ml pip install -r /workspace/requirements.txt
 ```
 
 ### Resume Training
+```bash
 model = YOLO("output/train/weights/last.pt")
-
 training_results = model.train(
-
     data=DATA_YAML,
-    
     epochs=200,
-    
     resume=True,  # Add this line
-    
     # ... rest of parameters
-
 )
+```
