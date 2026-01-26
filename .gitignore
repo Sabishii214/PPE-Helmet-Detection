@@ -1,24 +1,9 @@
-<<<<<<< HEAD
-output/
-raw_data/
-runs/
-.venv/
-__pycache__/
-yolo26n.pt
-yolov8*.pt
-analytic.py
-PPE_Dataset/
-=======
 .ipynb_checkpoints/
-.vscode/
 PPE_Dataset/
 raw_data/
 yolov8*.pt
-output/train/weights
-PPE_Helmet_Detection.py
-yolo26n.pt
+output/train/weights/
 runs/
 __pycache__/
 .venv/
 analytic.py
->>>>>>> PPE-Helmet-Detection

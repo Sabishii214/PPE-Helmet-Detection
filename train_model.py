@@ -51,12 +51,11 @@ def train_model():
             print(f"\nCheckpoint found: {last_ckpt}")
             print("Resuming training from last checkpoint...")
             model = YOLO(last_ckpt)
-            resume = True
+
         else:
             # Load pre-trained model
             print(f"\nLoading base model: {TRAINING_CONFIG['model']}")
             model = YOLO(TRAINING_CONFIG['model'])
-            resume = False
         
         # Start training
         print("\nStarting training...")
@@ -64,20 +63,17 @@ def train_model():
         print(f"Batch size: {TRAINING_CONFIG['batch']}")
         print(f"Image size: {TRAINING_CONFIG['imgsz']}")
         print(f"Device: {TRAINING_CONFIG['device']}")
-        print(f"Resume: {resume}")
         print("-"*60)
         
         # Remove 'model' from config when resuming as we already loaded it
         train_args = TRAINING_CONFIG.copy()
-        if resume:
-            train_args.pop('model', None)
+        train_args.pop('model', None)
 
         training_results = model.train(
             data=DATA_YAML,
             project=PROJECT_DIR,
             name='train',
-            exist_ok=False,  # Force unique directories to prevent overwriting
-            resume=resume,
+            exist_ok=True,
             **train_args
         )
         
