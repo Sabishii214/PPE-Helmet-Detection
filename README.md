@@ -45,6 +45,8 @@ PPE-Helmet-Detection/
 ├── yolov8*.pt
 ├── train.sh
 └── README.md
+```
+
 ## Prerequisites
 
 ### Required Python Packages
@@ -96,6 +98,7 @@ python3 train_model.py       # Just train
 python3 evaluate_model.py    # Just evaluate
 python3 export_model.py      # Just export
 python3 visualize.py         # Just visualize
+```
 
 ### Run Complete Pipeline
 ```bash
@@ -352,9 +355,15 @@ docker exec gpu-ml pip install -r /workspace/requirements.txt
 
 ### Resume Training
 model = YOLO("output/train/weights/last.pt")
+
 training_results = model.train(
+
     data=DATA_YAML,
+    
     epochs=200,
+    
     resume=True,  # Add this line
+    
     # ... rest of parameters
+
 )
