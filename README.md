@@ -144,7 +144,7 @@ python3 main.py --step analytics --mode webcam
 # Run EVERYTHING together (Images + Videos + Webcam)
 python3 main.py --step analytics --mode all
 ```
-# Place your best.pt model in the output/train/weights/ folder, and run analytics immediately on photos/videos.
+### Place your best.pt model in the output/train/weights/ folder, and run analytics immediately on photos/videos.
 ### Advanced Analytics Options
 ```bash
 # Change webcam duration (e.g., 60 seconds)
