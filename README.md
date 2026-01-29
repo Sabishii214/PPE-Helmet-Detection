@@ -43,6 +43,8 @@ PPE-Helmet-Detection/
 ├── requirements.txt
 ├── yolov8*.pt
 └── README.md
+```
+
 ## Prerequisites
 
 ### Required Python Packages
@@ -426,3 +428,4 @@ training_results = model.train(
     resume=True,  # Add this line
     # ... rest of parameters
 )
+```
