@@ -67,7 +67,7 @@ def export_model(model_path=None, force=False):
                 dynamic=True, 
                 half=True, 
                 device=0, 
-                batch=TRAINING_CONFIG['batch']
+                batch=1
             )
             results['engine'] = engine_path
         except Exception as e:
@@ -154,6 +154,17 @@ def benchmark_inference_speed(model_path=None, onnx_path=None, engine_path=None,
     pt_model = YOLO(model_path).to(device)
     results['pytorch_ms'], results['pytorch_fps'] = run_benchmark(pt_model, "PyTorch (FP32)")
 
+    # Benchmark PyTorch (Half)
+    print("Benchmarking PyTorch (FP16)...")
+    try:
+        pt_half_model = YOLO(model_path).to(device)
+        # Use the internal model's half() method
+        if hasattr(pt_half_model, 'model'):
+            pt_half_model.model.half()
+        results['pytorch_half_ms'], results['pytorch_half_fps'] = run_benchmark(pt_half_model, "PyTorch (FP16)")
+    except Exception as e:
+        print(f"PyTorch FP16 benchmark failed: {e}")
+
     # Benchmark ONNX (Half)
     if onnx_path and Path(onnx_path).exists():
         try:
@@ -180,6 +191,11 @@ def benchmark_inference_speed(model_path=None, onnx_path=None, engine_path=None,
     print(f"PyTorch Model:")
     print(f"  Time per image: {results['pytorch_ms']:.2f} ms")
     print(f"  FPS: {results['pytorch_fps']:.1f}")
+    
+    if 'pytorch_half_ms' in results:
+        print(f"\nPyTorch (FP16) Model:")
+        print(f"  Time per image: {results['pytorch_half_ms']:.2f} ms")
+        print(f"  FPS: {results['pytorch_half_fps']:.1f}")
     
     if 'onnx_ms' in results:
         print(f"\nONNX Model:")
@@ -240,7 +256,12 @@ def generate_optimization_report(export_paths, benchmark_results,
             return f"- {label}: N/A"
         return None
 
-    for name, label in [('pytorch', 'PyTorch (FP32)'), ('onnx', 'ONNX (FP16)'), ('engine', 'TensorRT (FP16)')]:
+    for name, label in [
+        ('pytorch', 'PyTorch (FP32)'), 
+        ('pytorch_half', 'PyTorch (FP16)'),
+        ('onnx', 'ONNX (FP16)'), 
+        ('engine', 'TensorRT (FP16)')
+    ]:
         line = format_speed_line(name, label, benchmark_results)
         if line:
             inference_speeds.append(line)

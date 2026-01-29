@@ -47,16 +47,28 @@ def train_model():
     try:
         # Check for checkpoint to resume
         last_ckpt = Path(PROJECT_DIR) / 'train' / 'weights' / 'last.pt'
+        resume_training = False
+        
         if last_ckpt.exists():
             print(f"\nCheckpoint found: {last_ckpt}")
             print("Resuming training from last checkpoint...")
             model = YOLO(last_ckpt)
-
+            resume_training = True
         else:
             # Load pre-trained model
             print(f"\nLoading base model: {TRAINING_CONFIG['model']}")
             model = YOLO(TRAINING_CONFIG['model'])
         
+        # Add callbacks for monitoring
+        def on_train_epoch_start(trainer):
+            monitor.start_epoch()
+            
+        def on_train_epoch_end(trainer):
+            monitor.end_epoch()
+            
+        model.add_callback("on_train_epoch_start", on_train_epoch_start)
+        model.add_callback("on_train_epoch_end", on_train_epoch_end)
+
         # Start training
         print("\nStarting training...")
         print(f"Epochs: {TRAINING_CONFIG['epochs']}")
@@ -65,7 +77,7 @@ def train_model():
         print(f"Device: {TRAINING_CONFIG['device']}")
         print("-"*60)
         
-        # Remove 'model' from config when resuming as we already loaded it
+        # Remove 'model' from config when using kwargs
         train_args = TRAINING_CONFIG.copy()
         train_args.pop('model', None)
 
@@ -74,6 +86,7 @@ def train_model():
             project=PROJECT_DIR,
             name='train',
             exist_ok=True,
+            resume=resume_training,
             **train_args
         )
         

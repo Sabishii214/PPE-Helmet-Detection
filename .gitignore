@@ -2,8 +2,13 @@
 PPE_Dataset/
 raw_data/
 yolov8*.pt
+yolo26n.pt
 output/train/weights/
+output/detect/
+output/evidence/
+output/reports/
+output/run*/
 runs/
 __pycache__/
 .venv/
-analytic.py
+Input/

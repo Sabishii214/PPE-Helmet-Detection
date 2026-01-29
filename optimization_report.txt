@@ -2,13 +2,13 @@ MODEL OPTIMIZATION REPORT
 ======================================================================
 
 EXPORTED FORMATS:
-- TensorRT (FP16): /workspace/output/train/weights/best.engine
-- ONNX (FP16): /workspace/output/train/weights/best.onnx
-- TorchScript: /workspace/output/train/weights/best.torchscript
+- TensorRT (FP16): output/train/weights/best.engine
+- ONNX (FP16): output/train/weights/best.onnx
+- TorchScript: output/train/weights/best.torchscript
 
 INFERENCE SPEED (GPU):
-- pytorch: 28.32 ms/image (35.3 FPS)
-- onnx: 24.36 ms/image (41.1 FPS)
-- engine: 12.55 ms/image (79.7 FPS)
+- PyTorch (FP32): 38.76 ms/image (25.8 FPS)
+- ONNX (FP16): 33.41 ms/image (29.9 FPS)
+- TensorRT (FP16): 11.55 ms/image (86.6 FPS)
 
 ======================================================================

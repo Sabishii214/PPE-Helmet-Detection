@@ -11,6 +11,14 @@ OUTPUT_DIR = Path('PPE_Dataset')
 DATA_YAML = 'data.yaml'
 PROJECT_DIR = 'output'
 
+# Configure Ultralytics Global Settings to prevent 'runs' folder creation
+try:
+    from ultralytics import settings
+    # Update runs_dir to use our project directory
+    settings.update({'runs_dir': PROJECT_DIR})
+except ImportError:
+    pass
+
 # Classes
 CLASSES = ['helmet', 'head', 'person']
 
@@ -21,10 +29,10 @@ TEST_SPLIT = 0.15
 
 # Training hyperparameters
 TRAINING_CONFIG = {
-    'model': 'yolov8m.pt',
+    'model': 'yolov8l.pt',
     'epochs': 130,
     'imgsz': 768,
-    'batch': 16,
+    'batch': 8,
     'device': 0 if torch.cuda.is_available() else 'cpu',  # Auto-detect GPU/CPU
     'workers': 4,
     'patience': 25,

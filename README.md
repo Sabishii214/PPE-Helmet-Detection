@@ -41,9 +41,7 @@ PPE-Helmet-Detection/
 ├── visualize.py
 ├── data.yaml
 ├── requirements.txt
-├── run.sh
 ├── yolov8*.pt
-├── train.sh
 └── README.md
 ## Prerequisites
 
@@ -96,6 +94,7 @@ python3 train_model.py       # Just train
 python3 evaluate_model.py    # Just evaluate
 python3 export_model.py      # Just export
 python3 visualize.py         # Just visualize
+python3 analytic.py          # Run PPE compliance analytics
 
 ### Run Complete Pipeline
 ```bash
@@ -127,6 +126,33 @@ python3 main.py --step export
 
 # Visualize dataset and predictions
 python3 main.py --step visualize
+
+# Run analytics on images/videos in Input folder (Standard Pipeline)
+python3 main.py --step analytics
+
+# Run analytics only for images
+python3 main.py --step analytics --mode images
+
+# Run analytics only for videos
+python3 main.py --step analytics --mode videos
+
+# Run analytics for real-time webcam (30 seconds)
+python3 main.py --step analytics --mode webcam
+
+# Run EVERYTHING together (Images + Videos + Webcam)
+python3 main.py --step analytics --mode all
+```
+# Place your best.pt model in the output/train/weights/ folder, and run analytics immediately on photos/videos.
+### Advanced Analytics Options
+```bash
+# Change webcam duration (e.g., 60 seconds)
+python3 main.py --step analytics --mode webcam --duration 60
+
+# Use a specific camera index (e.g., camera 1)
+python3 main.py --step analytics --mode webcam --cam 1
+
+# Provide a custom input directory
+python3 main.py --step analytics --mode images --input /path/to/custom/images
 ```
 
 ### Run Individual Modules
@@ -181,30 +207,25 @@ ssh user@remote-gpu-server
 python3 main.py
 ```
 
-### 3. Using Screen/Tmux for Long Training Sessions
-To keep training running even if you disconnect:
+### 3. Long Training Sessions
+The `docker_run.sh` script automatically uses `tmux` to keep your training session running in the background.
 
+To detach from the session:
+- Press `Ctrl+B`, then `D`
+
+To reattach later:
 ```bash
-# Using screen
-screen -S ppe_training
-python3 main.py
-# Press Ctrl+A then D to detach
-# Reattach later with: screen -r ppe_training
-
-# Using tmux
-tmux new -s ppe_training
-python3 main.py
-# Press Ctrl+B then D to detach
-# Reattach later with: tmux attach -t ppe_training
+./docker_run.sh
 ```
+
 
 ## Training Configuration
 
 The model is configured with the following parameters:
-- Model: YOLOv8*
+- Model: YOLOv8l
 - Epochs: 130
 - Image Size: 768x768
-- Batch Size: 16
+- Batch Size: 8
 - Device: GPU (device=0)
 - Workers: 4
 - Patience: 25 (early stopping)
@@ -282,6 +303,52 @@ Central configuration file for all hyperparameters and paths.
 - Benchmarks inference speed
 - Generates optimization report
 
+### `analytic.py`
+- **PPE Compliance Analytics System**
+- Processes images and videos for PPE compliance monitoring
+- Generates detailed compliance reports with violation tracking
+- Creates annotated evidence images
+- Supports batch processing and video frame analysis
+
+**Key Features**:
+- In-memory video processing for optimal performance
+- Automated compliance checking (helmet vs. exposed head detection)
+- JSON report generation with timestamps
+- Configurable confidence thresholds and frame skip rates
+- Proper logging for debugging and monitoring
+- **Recursive file search** - Automatically finds all images/videos in the `Input` folder and its subfolders
+
+**Input Structure**:
+Place your images and videos in the `Input/` directory. The system will recursively search all subdirectories:
+```
+Input/
+├── project1/
+│   ├── image1.jpg
+│   └── video1.mp4
+├── project2/
+│   └── subfolder/
+│       └── image2.png
+└── standalone_image.jpg
+```
+
+**Output**:
+- `output/run_YYYYMMDD_HHMMSS/reports/report_*.json` - Detailed JSON compliance report
+- `output/run_YYYYMMDD_HHMMSS/reports/analytics_report_*.txt` - Human-readable text report
+- `output/run_YYYYMMDD_HHMMSS/evidence/images/` - Annotated violation images
+- `output/run_YYYYMMDD_HHMMSS/evidence/videos/` - Annotated videos with detections
+
+**Webcam Support**:
+The analytics system now supports real-time webcam detection:
+```python
+from analytic import PPEDetectionAnalytics
+
+analytics = PPEDetectionAnalytics(conf_threshold=0.2)
+# Process webcam feed for 30 seconds
+analytics.process_webcam(camera_index=0, duration_seconds=30)
+analytics.save_report()
+analytics.save_text_report()
+```
+
 ### `main.py`
 - Orchestrates complete pipeline
 - CLI interface for running specific steps
@@ -351,6 +418,7 @@ docker exec gpu-ml pip install -r /workspace/requirements.txt
 ```
 
 ### Resume Training
+
 model = YOLO("output/train/weights/last.pt")
 training_results = model.train(
     data=DATA_YAML,

@@ -135,51 +135,7 @@ MODEL LOCATION: {results['model_path']}
     
     return report
 
-def compare_with_benchmarks(results, output_file='comparison_report.txt'):
-    """
-    Compare model performance with benchmark models
-    
-    Args:
-        results: Dictionary from evaluate_model()
-        output_file: Output file path
-    """
-    map50 = results['metrics']['map50']
-    
-    # Benchmark comparison data (Architecture stats only)
-    comparison_data = {
-        'Model': [
-            'Faster R-CNN ResNet50',
-            'RetinaNet ResNet50',
-            'EfficientDet-D0',
-            'DETR ResNet50',
-            'Your Model (YOLOv8m)'
-        ],
-        'Year': [2017, 2018, 2020, 2020, 2024],
-        'Parameters (M)': [41.8, 36.3, 3.9, 41.3, 25.9],
-        'Size (MB)': [167, 145, 15.6, 165, 52.1]
-    }
-    
-    df = pd.DataFrame(comparison_data)
-    
-    # Generate report
-    report = f"""MODEL COMPARISON REPORT
-{'='*70}
 
-YOUR MODEL:
-- Architecture: YOLOv8m
-- mAP50: {map50*100:.2f}%
-- Parameters: 25.9M
-- Model Size: 52.1 MB
-
-BENCHMARK COMPARISON:
-{df.to_string(index=False)}
-{'='*70}
-"""
-    
-    Path(output_file).write_text(report)
-    print(f"Comparison report saved: {output_file}")
-    
-    return report
 
 def test_and_report(model_path=None):
     """
@@ -193,14 +149,14 @@ def test_and_report(model_path=None):
     
     # Generate reports
     generate_performance_report(results)
-    compare_with_benchmarks(results)
+
     
     print("\n" + "="*60)
     print("EVALUATION COMPLETE")
     print("="*60)
     print("Reports generated:")
     print("  - performance_report.txt")
-    print("  - comparison_report.txt")
+
     print("="*60 + "\n")
 
 if __name__ == "__main__":

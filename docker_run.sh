@@ -16,9 +16,10 @@ fi
 echo "Container 'gpu-ml' is running"
 echo ""
 
-# Clean up user-created files
-echo "Cleaning up old output files..."
-docker exec gpu-ml rm -rf /workspace/output /workspace/__pycache__ 2>/dev/null || true
+# Clean up old training state (not the entire folder)
+echo "Cleaning up old training state..."
+docker exec gpu-ml rm -rf /workspace/output/train 2>/dev/null || true
+docker exec gpu-ml rm -rf /workspace/__pycache__ 2>/dev/null || true
 echo "Cleanup complete"
 echo ""
 
@@ -37,22 +38,39 @@ echo "Checking GPU availability..."
 docker exec gpu-ml nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null || echo "GPU check failed"
 echo ""
 
-# Run main.py with any arguments passed to this script
-echo "Starting training pipeline..."
+# Run main.py using tmux for persistence
+SESSION_NAME="ppe_training"
+echo "Starting training pipeline via tmux..."
+echo "Session Name: $SESSION_NAME"
 echo ""
 
-docker exec gpu-ml python3 /workspace/main.py "$@"
+# Check if session exists inside container
+if ! docker exec gpu-ml tmux has-session -t $SESSION_NAME 2>/dev/null; then
+    echo "Creating new tmux session..."
+    # Create detached session
+    docker exec gpu-ml tmux new-session -d -s $SESSION_NAME
+    
+    # Send command (wrapped to keep window open after finish)
+    CMD="python3 /workspace/main.py $*"
+    docker exec gpu-ml tmux send-keys -t $SESSION_NAME "$CMD; echo ''; echo 'Process finished. Press Enter to close window.'; read" C-m
+else
+    echo "Session already exists. Attaching..."
+fi
+
+echo "Attaching to session (Ctrl+B, D to detach)..."
+# Use -it to allow interaction
+docker exec -it gpu-ml tmux attach -t $SESSION_NAME
 
 exit_code=$?
 
 echo ""
 if [ $exit_code -eq 0 ]; then
-    echo "Pipeline completed successfully!"
+    echo "Detached or Finished."
     echo ""
+    echo "To reattach: ./docker_run.sh"
     echo "Output files are in: /workspace/output/"
-    echo "To copy to host: docker cp gpu-ml:/workspace/output ./output_backup"
 else
-    echo "Pipeline failed with exit code: $exit_code"
+    echo "Tmux attach failed with code: $exit_code"
 fi
 
 exit $exit_code

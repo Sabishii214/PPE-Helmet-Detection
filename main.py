@@ -13,6 +13,7 @@ from evaluate_model import test_and_report
 from visualize import visualize_dataset_samples, visualize_predictions, print_dataset_statistics
 from export_model import export_and_optimize
 from config import get_latest_model_path
+from analytic import PPEDetectionAnalytics
 
 
 def run_full_pipeline():
@@ -101,10 +102,17 @@ Examples:
     
     parser.add_argument(
         '--step',
-        choices=['prepare', 'train', 'evaluate', 'export', 'visualize', 'all'],
+        choices=['prepare', 'train', 'evaluate', 'export', 'visualize', 'analytics', 'all'],
         default='all',
         help='Run specific step (default: all)'
     )
+    
+    # Analytics specific arguments
+    parser.add_argument('--mode', choices=['images', 'videos', 'webcam', 'pipeline', 'all'], 
+                        default='pipeline', help='Analytics mode (if step=analytics)')
+    parser.add_argument('--cam', type=int, default=0, help='Camera index for webcam')
+    parser.add_argument('--duration', type=int, default=30, help='Webcam capture duration (sec)')
+    parser.add_argument('--input', help='Input path for analytics')
     
     args = parser.parse_args()
     
@@ -142,6 +150,34 @@ Examples:
             visualize_predictions(best_model_path, split='test', num_samples=8)
         else:
             print("Note: No trained model found. Train first to visualize predictions.")
+    
+    elif args.step == 'analytics':
+        print(f"Running: Analytics (Mode: {args.mode})")
+        analytics = PPEDetectionAnalytics(conf_threshold=0.2)
+        
+        if args.mode == 'images':
+            analytics.process_images(args.input)
+        elif args.mode == 'videos':
+            analytics.process_videos(args.input)
+        elif args.mode == 'webcam':
+            result = analytics.process_webcam(camera_index=args.cam, duration_seconds=args.duration)
+            if not result:
+                print("Error: Webcam could not be opened. Check if the camera is connected and Docker has permission.")
+                return
+        elif args.mode == 'all':
+            analytics.process_images(args.input)
+            analytics.process_videos(args.input)
+            analytics.process_webcam(camera_index=args.cam, duration_seconds=args.duration)
+        else: # pipeline
+            analytics.run_complete_pipeline(args.input)
+            return # run_complete_pipeline already saves and prints
+            
+        if analytics.results_log:
+            analytics.save_report()
+            analytics.save_text_report()
+            analytics.print_summary()
+        else:
+            print("No data processed. No reports generated.")
 
 if __name__ == "__main__":
     main()
