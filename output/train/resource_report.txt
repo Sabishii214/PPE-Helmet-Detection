@@ -1,35 +1,27 @@
 ============================================================
        TRAINING RESOURCE USAGE REPORT
 ============================================================
-Total Training Time:    6:37:14
+Total Training Time:    2:49:26
 Device:                 NVIDIA GeForce RTX 3060 (x1)
 ------------------------------------------------------------
 GPU MEMORY:
-  Peak Usage:           7543.0 MB
-  Average Usage:        7014 MB
+  Peak Usage:           4501.0 MB
+  Average Usage:        4352 MB
 ------------------------------------------------------------
 GPU UTILIZATION:
-  Average:              96.9 %
+  Average:              95.8 %
   Peak:                 100.0 %
 ------------------------------------------------------------
 GPU POWER USAGE (Watts):
-  Average:              146.8 W
-  Min:                  14.8 W
-  Max:                  153.2 W
+  Average:              143.7 W
+  Min:                  15.3 W
+  Max:                  146.5 W
 ------------------------------------------------------------
-EPOCH TIMING (111 epochs recorded):
-  Average Time:         196.50 s
-  Min Time:             196.32 s
-  Max Time:             201.55 s
+EPOCH TIMING (101 epochs recorded):
+  Average Time:         92.16 s
+  Min Time:             92.05 s
+  Max Time:             93.49 s
 ------------------------------------------------------------
 COST ESTIMATION:
-  Total GPU Hours:      6.6208 hours
-============================================================
-
-------------------------------------------------------------
-TRAINING FINAL ACCURACY METRICS (Validation Set)
-  mAP@50:       0.6393 (63.93%)
-  mAP@50-95:    0.4198 (41.98%)
-  Precision:    0.9558
-  Recall:       0.5898
+  Total GPU Hours:      2.8240 hours
 ============================================================

@@ -2,22 +2,16 @@
 Model evaluation and testing module
 Tests trained model and generates performance reports
 """
+
+
 from pathlib import Path
 import pandas as pd
 from ultralytics import YOLO
 
-from config import DATA_YAML, TEST_CONFIG, CLASSES, get_latest_model_path, PROJECT_DIR
+from config import DATA_YAML, TEST_CONFIG, CLASSES, get_latest_model_path, PROJECT_DIR, TRAINING_CONFIG
 
 def evaluate_model(model_path=None):
-    """
-    Evaluate trained model on test set
-    
-    Args:
-        model_path: Path to trained model weights
-        
-    Returns:
-        Dictionary containing test results and metrics
-    """
+    """Evaluate trained model on test set """
     print("\n" + "="*60)
     print("MODEL EVALUATION")
     print("="*60)
@@ -82,13 +76,7 @@ def evaluate_model(model_path=None):
     }
 
 def generate_performance_report(results, output_file='performance_report.txt'):
-    """
-    Generate detailed performance report
-    
-    Args:
-        results: Dictionary from evaluate_model()
-        output_file: Output file path
-    """
+    """Generate detailed performance report"""
     from config import OUTPUT_DIR
     
     metrics = results['metrics']
@@ -99,12 +87,20 @@ def generate_performance_report(results, output_file='performance_report.txt'):
     valid_count = len(list((OUTPUT_DIR / 'valid' / 'images').glob('*')))
     test_count = len(list((OUTPUT_DIR / 'test' / 'images').glob('*')))
     
+    # Build class-wise performance section dynamically
+    class_perf_lines = []
+    for i, cls in enumerate(CLASSES):
+        ap50 = test_results.box.ap50[i]
+        class_perf_lines.append(f"- {cls:10s}: {ap50:.4f} ({ap50*100:.2f}%)")
+    
+    class_perf_str = "\n".join(class_perf_lines)
+    
     report = f"""PPE DETECTION MODEL - PERFORMANCE REPORT
 {'='*70}
 
 MODEL CONFIGURATION:
 - Architecture: YOLOv8m
-- Image Size: 768x768
+- Image Size: {TRAINING_CONFIG['imgsz']}x{TRAINING_CONFIG['imgsz']}
 - Confidence Threshold: {TEST_CONFIG['conf']}
 
 DATASET:
@@ -120,9 +116,7 @@ TEST SET METRICS:
 - mAP@50-95:  {metrics['map50_95']:.4f} ({metrics['map50_95']*100:.2f}%)
 
 CLASS-WISE PERFORMANCE (AP@50):
-- Helmet:     {test_results.box.ap50[0]:.4f} ({test_results.box.ap50[0]*100:.2f}%)
-- Head:       {test_results.box.ap50[1]:.4f} ({test_results.box.ap50[1]*100:.2f}%)
-- Person:     {test_results.box.ap50[2]:.4f} ({test_results.box.ap50[2]*100:.2f}%)
+{class_perf_str}
 
 PRIMARY CLASSES SUMMARY (Helmet & Head):
 - Average AP@50: {((test_results.box.ap50[0] + test_results.box.ap50[1]) / 2):.4f} ({((test_results.box.ap50[0] + test_results.box.ap50[1]) / 2)*100:.2f}%)
@@ -138,12 +132,7 @@ MODEL LOCATION: {results['model_path']}
 
 
 def test_and_report(model_path=None):
-    """
-    Main function to test model and generate all reports
-    
-    Args:
-        model_path: Path to trained model weights
-    """
+    """Main function to test model and generate all reports"""
     # Evaluate model
     results = evaluate_model(model_path)
     

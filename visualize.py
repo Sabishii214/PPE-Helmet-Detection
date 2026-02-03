@@ -2,6 +2,8 @@
 Visualization utilities
 Functions for visualizing dataset samples and model predictions
 """
+
+
 import cv2
 from matplotlib import pyplot as plt
 from pathlib import Path
@@ -10,16 +12,7 @@ from config import OUTPUT_DIR, CLASSES, VIZ_CONFIG, get_latest_model_path
 
 
 def draw_boxes(img_path, label_path):
-    """
-    Draw bounding boxes on image
-    
-    Args:
-        img_path: Path to image file
-        label_path: Path to YOLO format label file
-        
-    Returns:
-        Image with bounding boxes drawn
-    """
+    """Draw bounding boxes on image """
     img = cv2.imread(str(img_path))
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     height, width = img.shape[:2]
@@ -46,14 +39,7 @@ def draw_boxes(img_path, label_path):
 
 
 def visualize_dataset_samples(split='train', num_samples=4, save_path=None):
-    """
-    Visualize random samples from dataset
-    
-    Args:
-        split: Dataset split ('train', 'valid', or 'test')
-        num_samples: Number of samples to visualize
-        save_path: Path to save visualization (if None, saves to output/visualizations with timestamp)
-    """
+    """Visualize random samples from dataset"""
     from datetime import datetime
     
     # Determine output path if not specified
@@ -98,16 +84,8 @@ def visualize_dataset_samples(split='train', num_samples=4, save_path=None):
 
 def visualize_predictions(model, split='test', num_samples=8, 
                          conf_threshold=0.3, save_path=None):
-    """
-    Visualize model predictions on test images
-    
-    Args:
-        model: Trained YOLO model or path to model
-        split: Dataset split to use
-        num_samples: Number of samples to visualize
-        conf_threshold: Confidence threshold for predictions
-        save_path: Path to save visualization (if None, saves to model's run directory)
-    """
+
+    """Visualize model predictions on test images"""
     from ultralytics import YOLO
     
     if isinstance(model, (str, Path)) or model is None:
@@ -179,15 +157,7 @@ def visualize_predictions(model, split='test', num_samples=8,
 
 
 def count_objects(labels_dir):
-    """
-    Count objects per class in a dataset split
-    
-    Args:
-        labels_dir: Path to labels directory
-        
-    Returns:
-        Counter object with class counts
-    """
+    """Count objects per class in a dataset split"""
     counts = Counter()
     for label_file in Path(labels_dir).glob('*.txt'):
         for line in label_file.read_text().split('\n'):
@@ -212,7 +182,10 @@ def print_dataset_statistics():
             counts = count_objects(OUTPUT_DIR / split / 'labels')
             print("  Objects per class:")
             for class_id, count in sorted(counts.items()):
-                print(f"    {CLASSES[class_id]:10s}: {count}")
+                if class_id < len(CLASSES):
+                    print(f"    {CLASSES[class_id]:10s}: {count}")
+                else:
+                    print(f"    Class ID {class_id} (Skipped): {count}")
     
     print("\n" + "="*60 + "\n")
 

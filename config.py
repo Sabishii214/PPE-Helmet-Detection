@@ -2,6 +2,8 @@
 Configuration file for PPE Helmet Detection
 Contains all paths, classes, and training hyperparameters
 """
+
+
 import torch
 from pathlib import Path
 
@@ -20,7 +22,7 @@ except ImportError:
     pass
 
 # Classes
-CLASSES = ['helmet', 'head', 'person']
+CLASSES = ['helmet', 'head']
 
 # Dataset splits
 TRAIN_SPLIT = 0.7
@@ -29,9 +31,9 @@ TEST_SPLIT = 0.15
 
 # Training hyperparameters
 TRAINING_CONFIG = {
-    'model': 'yolov8l.pt',
+    'model': 'yolov8m.pt',
     'epochs': 130,
-    'imgsz': 768,
+    'imgsz': 640,
     'batch': 8,
     'device': 0 if torch.cuda.is_available() else 'cpu',  # Auto-detect GPU/CPU
     'workers': 4,
@@ -40,53 +42,57 @@ TRAINING_CONFIG = {
     'plots': True,
     
     # Data augmentation
-    'hsv_h': 0.02,
-    'hsv_s': 0.6,
+    'hsv_h': 0.015,  # Reduced from 0.02
+    'hsv_s': 0.7,    # Increased from 0.6
     'hsv_v': 0.4,
-    'degrees': 15,
+    'degrees': 15,   # Keeps rotation
     'mixup': 0.1,
     'translate': 0.1,
     'scale': 0.7,
+    'shear': 0.0,
+    'perspective': 0.001, # Added perspective
     'flipud': 0.0,
     'fliplr': 0.5,
     'mosaic': 0.9,
-    
+
     # Optimizer
     'optimizer': 'AdamW',
     'momentum': 0.937,
     'weight_decay': 0.0005,
-    'lr0': 0.01,
+    'lr0': 0.001,
     'lrf': 0.01,
-    'warmup_epochs': 3,
+    'warmup_epochs': 5,
     'warmup_momentum': 0.8,
 
     # Stability
     'label_smoothing': 0.05,
-    'cache': True,
+    'cache': False,
+    'amp': True,
     'seed': 42,
+}
+
+# Inference Thresholds (Standardized)
+INFERENCE_THRESHOLDS = {
+    'image': 0.25,
+    'video': 0.35,
+    'webcam': 0.55
 }
 
 # Testing configuration
 TEST_CONFIG = {
-    'conf': 0.25,  # Confidence threshold
+    'conf': INFERENCE_THRESHOLDS['image'],  # Confidence threshold from centralized config
     'split': 'test',
 }
 
 # Visualization settings
 VIZ_CONFIG = {
-    'colors': [(255, 0, 0), (0, 255, 0), (0, 0, 255)],  # BGR colors for each class
+    'colors': [(255, 0, 0), (0, 255, 0)],  # BGR colors for each class (Helmet, Head)
 }
 
 def get_latest_model_path(model_type='best'):
     """
     Find the latest model weights in the project output directory.
     Checks both /workspace/output and output locally.
-    
-    Args:
-        model_type: 'best' or 'last' weights
-        
-    Returns:
-        Path object to model weights, or default fallback path
     """
     # Direct check first
     weights_path = Path(PROJECT_DIR) / 'train' / 'weights' / f'{model_type}.pt'

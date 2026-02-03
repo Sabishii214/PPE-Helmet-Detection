@@ -3,28 +3,27 @@ PPE DETECTION MODEL - PERFORMANCE REPORT
 
 MODEL CONFIGURATION:
 - Architecture: YOLOv8m
-- Image Size: 768x768
+- Image Size: 640x640
 - Confidence Threshold: 0.25
 
 DATASET:
-- Train: 3500 images
-- Valid: 868 images
-- Test: 868 images
-- Classes: helmet, head, person
+- Train: 3499 images
+- Valid: 750 images
+- Test: 751 images
+- Classes: helmet, head
 
 TEST SET METRICS:
-- Precision:  0.9362 (93.62%)
-- Recall:     0.6004 (60.04%)
-- mAP@50:     0.6277 (62.77%)
-- mAP@50-95:  0.4145 (41.45%)
+- Precision:  0.9279 (92.79%)
+- Recall:     0.8995 (89.95%)
+- mAP@50:     0.9481 (94.81%)
+- mAP@50-95:  0.6416 (64.16%)
 
 CLASS-WISE PERFORMANCE (AP@50):
-- Helmet:     0.9604 (96.04%)
-- Head:       0.9045 (90.45%)
-- Person:     0.0182 (1.82%)
+- helmet    : 0.9700 (97.00%)
+- head      : 0.9262 (92.62%)
 
 PRIMARY CLASSES SUMMARY (Helmet & Head):
-- Average AP@50: 0.9324 (93.24%)
+- Average AP@50: 0.9481 (94.81%)
 
 MODEL LOCATION: output/train/weights/best.pt
 ======================================================================

@@ -40,7 +40,6 @@ class ResourceMonitor:
         while not self.stop_event.is_set():
             try:
                 # Get GPU stats via nvidia-smi
-                # query-gpu=utilization.gpu,memory.used,power.draw --format=csv,noheader,nounits
                 result = subprocess.check_output(
                     ['nvidia-smi', '--query-gpu=utilization.gpu,memory.used,power.draw', '--format=csv,noheader,nounits'],
                     encoding='utf-8'

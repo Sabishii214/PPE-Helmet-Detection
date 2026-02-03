@@ -108,11 +108,15 @@ Examples:
     )
     
     # Analytics specific arguments
-    parser.add_argument('--mode', choices=['images', 'videos', 'webcam', 'pipeline', 'all'], 
+    parser.add_argument('--mode', choices=['pipeline', 'webcam'], 
                         default='pipeline', help='Analytics mode (if step=analytics)')
     parser.add_argument('--cam', type=int, default=0, help='Camera index for webcam')
     parser.add_argument('--duration', type=int, default=30, help='Webcam capture duration (sec)')
     parser.add_argument('--input', help='Input path for analytics')
+    parser.add_argument('--model', help='Path to model weights (overrides default best.pt)')
+    parser.add_argument('--conf', type=float, default=None, help='Confidence threshold (default: auto-detected per mode)')
+    parser.add_argument('--skip', type=int, default=1, help='Frame skip count (process every Nth frame)')
+    parser.add_argument('--show', action='store_true', default=None, help='Show live display window (default: True for webcam)')
     
     args = parser.parse_args()
     
@@ -153,23 +157,22 @@ Examples:
     
     elif args.step == 'analytics':
         print(f"Running: Analytics (Mode: {args.mode})")
-        analytics = PPEDetectionAnalytics(conf_threshold=0.2)
+        analytics = PPEDetectionAnalytics(model_path=args.model, conf_threshold=args.conf)
         
-        if args.mode == 'images':
-            analytics.process_images(args.input)
-        elif args.mode == 'videos':
-            analytics.process_videos(args.input)
-        elif args.mode == 'webcam':
-            result = analytics.process_webcam(camera_index=args.cam, duration_seconds=args.duration)
+        if args.mode == 'webcam':
+            # Default show to True for webcam if not specified
+            show_live = args.show if args.show is not None else True
+            result = analytics.process_webcam(
+                camera_index=args.cam, 
+                duration_seconds=args.duration, 
+                frame_skip=args.skip, 
+                show_live=show_live
+            )
             if not result:
                 print("Error: Webcam could not be opened. Check if the camera is connected and Docker has permission.")
                 return
-        elif args.mode == 'all':
-            analytics.process_images(args.input)
-            analytics.process_videos(args.input)
-            analytics.process_webcam(camera_index=args.cam, duration_seconds=args.duration)
         else: # pipeline
-            analytics.run_complete_pipeline(args.input)
+            analytics.run_complete_pipeline(args.input, frame_skip=args.skip)
             return # run_complete_pipeline already saves and prints
             
         if analytics.results_log:

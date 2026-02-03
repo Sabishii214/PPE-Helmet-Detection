@@ -132,14 +132,14 @@ python3 main.py --step visualize
 # Run analytics on images/videos in Input folder (Standard Pipeline)
 python3 main.py --step analytics
 
-# Run analytics only for images
-python3 main.py --step analytics --mode images
+# Run analytics for custom input directory
+python3 main.py --step analytics --input your_folder_name
 
-# Run analytics only for videos
-python3 main.py --step analytics --mode videos
-
-# Run analytics for real-time webcam (30 seconds)
-python3 main.py --step analytics --mode webcam
+# Run analytics for local webcam (Optimized for Laptops)
+# Use --skip to process every Nth frame (speeds up CPU processing)
+# Use --conf to adjust detection sensitivity
+# Use --show to enable/disable live preview (default: True for webcam)
+python3 main.py --step analytics --mode webcam --duration 60 --skip 3 --conf 0.3 --show
 
 # Run EVERYTHING together (Images + Videos + Webcam)
 python3 main.py --step analytics --mode all
@@ -149,13 +149,6 @@ python3 main.py --step analytics --mode all
 ```bash
 # Change webcam duration (e.g., 60 seconds)
 python3 main.py --step analytics --mode webcam --duration 60
-
-# Use a specific camera index (e.g., camera 1)
-python3 main.py --step analytics --mode webcam --cam 1
-
-# Provide a custom input directory
-python3 main.py --step analytics --mode images --input /path/to/custom/images
-```
 
 ### Run Individual Modules
 

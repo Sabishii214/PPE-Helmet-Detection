@@ -11,7 +11,7 @@ import numpy as np
 from pathlib import Path
 from datetime import datetime
 from ultralytics import YOLO
-from config import CLASSES, get_latest_model_path
+from config import CLASSES, get_latest_model_path, INFERENCE_THRESHOLDS
 
 # Configure logging
 logging.basicConfig(
@@ -25,9 +25,31 @@ logger = logging.getLogger(__name__)
 class PPEDetectionAnalytics:
     """Main analytics class for PPE detection"""
     
-    def __init__(self, model_path=None, conf_threshold=0.2):
+    def __init__(self, model_path=None, conf_threshold=None):
         self.model = YOLO(model_path or get_latest_model_path('best'))
-        self.conf_threshold = conf_threshold
+        
+        # Confidence thresholds (Load from Config)
+        self.conf_image = INFERENCE_THRESHOLDS['image']
+        self.conf_video = INFERENCE_THRESHOLDS['video']
+        self.conf_webcam = INFERENCE_THRESHOLDS['webcam']
+        
+        # If user explicitly provided a custom threshold via CLI
+        if conf_threshold is not None and conf_threshold != 0.2: # 0.2 is default argparse value we want to ignore if possible, OR we change argparse default to None
+            logger.info(f"Overriding defaults with user-provided confidence: {conf_threshold}")
+            self.conf_image = conf_threshold
+            self.conf_video = conf_threshold
+            self.conf_webcam = conf_threshold
+            self.conf_threshold = conf_threshold
+        else:
+             self.conf_threshold = self.conf_image # Set a reasonable default for fallback logic
+
+        
+        # Temporal smoothing buffers
+        from collections import deque
+        self.temporal_window = 5
+        self.head_history = deque(maxlen=self.temporal_window)
+        self.helmet_history = deque(maxlen=self.temporal_window)
+        
         self.classes = CLASSES
         self.results_log = []
         
@@ -47,56 +69,110 @@ class PPEDetectionAnalytics:
         }
         
         # Create output directories for this specific run
-        for key in ['report_dir', 'evidence_dir']:
-            Path(self.config['output'][key]).mkdir(parents=True, exist_ok=True)
+        try:
+            for key in ['report_dir', 'evidence_dir']:
+                Path(self.config['output'][key]).mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            print("\n" + "!" * 60)
+            print("PERMISSION ERROR: Cannot write to 'output' directory.")
+            print("This usually happens when 'output' is owned by root (via Docker).")
+            print("FIX: Run 'sudo chown -R $USER:$USER output' on your host machine.")
+            print("!" * 60 + "\n")
+            raise
             
         logger.info(f"Initialized analytics run: {self.run_id}")
         logger.info(f"Output directory: {self.run_dir}")
     
+    def _is_valid_detection(self, cls_name, conf, box, frame_area=None):
+        """Validate detection using class-specific confidence and box area"""
+       
+        # 1. Class-specific confidence gates (Lowered from 0.6/0.55 for better recall)
+        if cls_name == 'helmet' and conf < 0.35:
+            return False
+        if cls_name == 'head' and conf < 0.3:
+            return False
+            
+        # 2. Minimum box area check (if frame_area provided)
+        if frame_area:
+            x1, y1, x2, y2 = box
+            box_area = (x2 - x1) * (y2 - y1)
+            if box_area < 0.0005 * frame_area:
+                return False
+                
+        return True
+
     def detect_ppe(self, image_path):
         """Run detection on image and return results"""
-        results = self.model(image_path, conf=self.conf_threshold, verbose=False)[0]
-        detections = {'helmet': 0, 'head': 0, 'person': 0, 'boxes': []}
+        # Load image to get dimensions for area check
+        img = cv2.imread(str(image_path))
+        if img is None:
+            logger.error(f"Could not load image: {image_path}")
+            return {'helmet': 0, 'head': 0, 'boxes': [], 'error': True}
+            
+        h, w = img.shape[:2]
+        frame_area = h * w
+        
+        results = self.model(image_path, conf=self.conf_image, verbose=False)[0]
+        # Initialize detections dictionary based on CLASSES
+        detections = {cls: 0 for cls in self.classes}
+        detections['boxes'] = []
         
         for box in results.boxes:
-            cls = int(box.cls[0])
-            detections[self.classes[cls]] += 1
-            detections['boxes'].append({
-                'class': self.classes[cls],
-                'confidence': float(box.conf[0]),
-                'bbox': list(map(int, box.xyxy[0]))
-            })
+            cls_idx = int(box.cls[0])
+            cls_name = self.classes[cls_idx]
+            conf = float(box.conf[0])
+            bbox = list(map(int, box.xyxy[0]))
+            
+            if self._is_valid_detection(cls_name, conf, bbox, frame_area):
+                detections[cls_name] += 1
+                detections['boxes'].append({
+                    'class': cls_name,
+                    'confidence': conf,
+                    'bbox': bbox
+                })
         
         return detections
     
-    def check_compliance(self, detections):
-        """Check if detections meet compliance rules"""
-        h_count = detections['helmet']
-        hd_count = detections['head']
-        p_count = detections['person']
+    def check_compliance(self, detections, is_persistent_check=False, head_persistent=False, helmet_persistent=False):
+
+        h_count = detections.get('helmet', 0)
+        hd_count = detections.get('head', 0)
         
-        # Rule: No exposed heads and at least one helmet
-        is_compliant = (hd_count == 0) and (h_count > 0)
-        
-        if hd_count > 0:
-            violation = f'{hd_count} worker(s) without helmet'
-        elif h_count == 0 and p_count > 0:
-            violation = 'No helmets detected'
+        if is_persistent_check:
+            is_compliant = not head_persistent or helmet_persistent
+            
+            if not is_compliant:
+                violation = 'Persistent Head Detected without Helmet'
+            elif helmet_persistent:
+                violation = 'Compliant'
+            else:
+                violation = 'Compliant' # No head persistent
+                
         else:
-            violation = 'Compliant'
+            
+            if hd_count > 0:
+                is_compliant = False
+                violation = f'{hd_count} worker(s) without helmet'
+            else:
+                is_compliant = True
+                violation = 'Compliant'
         
         return {
             'compliant': is_compliant,
             'helmet_count': h_count,
             'head_count': hd_count,
-            'person_count': p_count,
             'violation_type': violation,
-            'severity': 'HIGH' if hd_count > 0 else 'NONE'
+            'severity': 'HIGH' if not is_compliant else 'NONE'
         }
     
     def process_image(self, image_path, save_annotated=True):
         """Process single image and optionally save annotated version"""
         detections = self.detect_ppe(image_path)
+        
+        # Handle load error
+        if detections.get('error'):
+            return None
+            
         compliance = self.check_compliance(detections)
         
         result = {
@@ -132,25 +208,26 @@ class PPEDetectionAnalytics:
         results = []
         
         for idx, img_path in enumerate(images, 1):
-            results.append(self.process_image(img_path))
+            res = self.process_image(img_path)
+            if res:
+                results.append(res)
             if idx % 10 == 0:
                 logger.info(f"  {idx}/{len(images)} processed")
         
         logger.info(f"Completed {len(images)} images")
         return results
     
-    def process_single_video(self, video_path, save_annotated=True):
-        """Process single video file frame by frame using in-memory processing
-        
-        Args:
-            video_path: Path to video file or integer camera index (0, 1, etc.)
-            save_annotated: Whether to save annotated output
-        """
+    def process_single_video(self, video_path, save_annotated=True, frame_skip=None, show_live=False):
+        """Process single video file frame by frame using in-memory processing """
         # Handle both file paths and camera indices
         if isinstance(video_path, int):
             cap = cv2.VideoCapture(video_path)
             is_camera = True
             source_name = f"Camera {video_path}"
+        elif str(video_path).startswith(('http://', 'https://')):
+            cap = cv2.VideoCapture(str(video_path))
+            is_camera = True
+            source_name = "RemoteStream"
         else:
             cap = cv2.VideoCapture(str(video_path))
             is_camera = False
@@ -164,15 +241,25 @@ class PPEDetectionAnalytics:
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) if not is_camera else float('inf')
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        frame_skip = self.config['processing']['video_frame_skip']
+        frame_area = width * height
+        
+        # Determine frame skip
+        skip = frame_skip if frame_skip is not None else self.config['processing']['video_frame_skip']
         max_frames = self.config['processing']['max_video_frames']
         
         frames_to_process = min(total_frames, max_frames) if not is_camera else max_frames
-        logger.info(f"  Processing {source_name}: {frames_to_process} frames (skip={frame_skip})")
+        logger.info(f"  Processing {source_name}: {frames_to_process} frames (skip={skip})")
         
         frame_results = []
         annotated_frames = []  # Store frames with annotations for video output
         frame_num = 0
+        
+        # determine confidence based on source
+        conf_thresh = self.conf_webcam if is_camera else self.conf_video
+        
+        # Clear histories for new video
+        self.head_history.clear()
+        self.helmet_history.clear()
         
         while frame_num < frames_to_process:
             ret, frame = cap.read()
@@ -180,25 +267,54 @@ class PPEDetectionAnalytics:
                 break
             
             # Process every Nth frame - pass frame directly to model (in-memory)
-            if frame_num % frame_skip == 0:
+            if frame_num % skip == 0:
+                # Preprocessing for Webcam
+                inference_frame = frame.copy()
+                if is_camera:
+                    # Blur stabilization
+                    inference_frame = cv2.GaussianBlur(inference_frame, (3, 3), 0)
+                    # Brightness normalization (alpha=1.1, beta=10)
+                    inference_frame = cv2.convertScaleAbs(inference_frame, alpha=1.1, beta=10)
+                
                 # Convert BGR to RGB for YOLO
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frame_rgb = cv2.cvtColor(inference_frame, cv2.COLOR_BGR2RGB)
                 
                 # Run detection directly on numpy array
-                results = self.model(frame_rgb, conf=self.conf_threshold, verbose=False)[0]
+                results = self.model(frame_rgb, conf=conf_thresh, verbose=False)[0]
                 
                 # Extract detections
-                detections = {'helmet': 0, 'head': 0, 'person': 0, 'boxes': []}
-                for box in results.boxes:
-                    cls = int(box.cls[0])
-                    detections[self.classes[cls]] += 1
-                    detections['boxes'].append({
-                        'class': self.classes[cls],
-                        'confidence': float(box.conf[0]),
-                        'bbox': list(map(int, box.xyxy[0]))
-                    })
+                detections = {cls: 0 for cls in self.classes}
+                detections['boxes'] = []
                 
-                compliance = self.check_compliance(detections)
+                for box in results.boxes:
+                    cls_idx = int(box.cls[0])
+                    cls_name = self.classes[cls_idx]
+                    conf = float(box.conf[0])
+                    bbox = list(map(int, box.xyxy[0]))
+                    
+                    if self._is_valid_detection(cls_name, conf, bbox, frame_area):
+                        detections[cls_name] += 1
+                        detections['boxes'].append({
+                            'class': cls_name,
+                            'confidence': conf,
+                            'bbox': bbox
+                        })
+                
+                # Temporal Smoothing Logic
+                self.head_history.append(detections['head'] > 0)
+                self.helmet_history.append(detections['helmet'] > 0)
+                
+                head_persistent = sum(self.head_history) >= 2 # Reduced from 3
+                helmet_persistent = sum(self.helmet_history) >= 2 # Reduced from 3
+                
+                # Check compliance
+                # For webcam/video, use persistent logic
+                compliance = self.check_compliance(
+                    detections, 
+                    is_persistent_check=True,  # Always use persistent check for video/webcam
+                    head_persistent=head_persistent,
+                    helmet_persistent=helmet_persistent
+                )
                 
                 frame_results.append({
                     'frame': frame_num,
@@ -207,21 +323,47 @@ class PPEDetectionAnalytics:
                     'compliance': compliance
                 })
                 
-                # Save annotated frame if enabled
+                # Save annotated frame if enabled (Stable Visualization)
                 if save_annotated:
-                    annotated_frame = results.plot()  # Get annotated frame from YOLO
-                    # Convert RGB back to BGR for video writing
-                    annotated_frame_bgr = cv2.cvtColor(annotated_frame, cv2.COLOR_RGB2BGR)
+                    # Create copy for manual annotation
+                    # results.plot() is too flickering, so we draw only confirmed boxes
+                    annotated_frame_bgr = frame.copy()
+                    
+                    for box_data in detections['boxes']:
+                        cls = box_data['class']
+                        # Only draw if the class is currently 'persistent' (confirmed 3+ times in window)
+                        is_confirmed = (cls == 'head' and head_persistent) or \
+                                      (cls == 'helmet' and helmet_persistent)
+                        
+                        if is_confirmed:
+                            x1, y1, x2, y2 = box_data['bbox']
+                            conf = box_data['confidence']
+                            
+                            # Choose color based on class
+                            color = (0, 255, 0) if cls == 'helmet' else (0, 0, 255)
+                            cv2.rectangle(annotated_frame_bgr, (x1, y1), (x2, y2), color, 2)
+                            label = f"{cls} {conf:.2f}"
+                            cv2.putText(annotated_frame_bgr, label, (x1, y1 - 10), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
                     
                     # Apply red overlay if violation detected
                     if not compliance['compliant']:
                         annotated_frame_bgr = self._apply_red_overlay(annotated_frame_bgr, compliance)
                         
                     annotated_frames.append(annotated_frame_bgr)
+
+                    # Live Display
+                    if show_live:
+                        cv2.imshow(f"PPE Compliance - {source_name}", annotated_frame_bgr)
+                        if cv2.waitKey(1) & 0xFF == ord('q'):
+                            logger.info("User interrupted live preview.")
+                            break
             
             frame_num += 1
         
         cap.release()
+        if show_live:
+            cv2.destroyAllWindows()
         
         # Calculate video statistics
         violations = [f for f in frame_results if not f['compliance']['compliant']]
@@ -249,7 +391,7 @@ class PPEDetectionAnalytics:
         
         return result
     
-    def process_videos(self, video_dir=None):
+    def process_videos(self, video_dir=None, frame_skip=None):
         """Process all videos in directory (recursively)"""
         vid_dir = Path(video_dir or self.config['input']['base_dir'])
         
@@ -266,20 +408,15 @@ class PPEDetectionAnalytics:
         results = []
         
         for video_path in videos:
-            result = self.process_single_video(video_path)
+            result = self.process_single_video(video_path, frame_skip=frame_skip)
             if result:
                 results.append(result)
                 self.results_log.append(result)
         
         return results
     
-    def process_webcam(self, camera_index=0, duration_seconds=30):
-        """Process webcam feed for real-time PPE detection
-        
-        Args:
-            camera_index: Camera device index (0 for default camera)
-            duration_seconds: How long to capture (in seconds)
-        """
+    def process_webcam(self, camera_index=0, duration_seconds=30, frame_skip=None, show_live=True):
+        """Process webcam feed for real-time PPE detection """
         logger.info(f"Starting webcam capture from camera {camera_index} for {duration_seconds}s...")
         
         # Calculate max frames based on duration
@@ -287,7 +424,7 @@ class PPEDetectionAnalytics:
         original_max_frames = self.config['processing']['max_video_frames']
         self.config['processing']['max_video_frames'] = duration_seconds * fps
         
-        result = self.process_single_video(camera_index, save_annotated=True)
+        result = self.process_single_video(camera_index, save_annotated=True, frame_skip=frame_skip, show_live=show_live)
         
         # Restore original max_frames
         self.config['processing']['max_video_frames'] = original_max_frames
@@ -319,9 +456,11 @@ class PPEDetectionAnalytics:
         output_dir.mkdir(parents=True, exist_ok=True)
         
         # Run inference again to get the result object with plot capability
-        results = self.model(str(image_path), conf=self.conf_threshold, verbose=False)[0]
+        # Use conf_image to match detection logic
+        results = self.model(str(image_path), conf=self.conf_image, verbose=False)[0]
         
-        # Use YOLO's built-in plot method for consistent annotations
+        # Note: results.plot() might still show boxes we filtered out by area/class-specific conf
+        # but the compliance decision (red overlay) is based on the filtered 'detections'
         annotated_img = results.plot()
         
         # Convert RGB back to BGR 
@@ -373,9 +512,11 @@ class PPEDetectionAnalytics:
         img_compliant = sum(1 for r in image_results if r['compliance']['compliant'])
         img_violations = len(image_results) - img_compliant
         
-        total_helmets = sum(r['detections']['helmet'] for r in image_results)
-        total_heads = sum(r['detections']['head'] for r in image_results)
-        total_persons = sum(r['detections']['person'] for r in image_results)
+        # Calculate detection totals (images + peak detections from videos)
+        total_helmets = sum(r['detections'].get('helmet', 0) for r in image_results) + \
+                        sum(max((fr['detections'].get('helmet', 0) for fr in vr.get('frame_results', [])), default=0) for vr in video_results)
+        total_heads = sum(r['detections'].get('head', 0) for r in image_results) + \
+                      sum(max((fr['detections'].get('head', 0) for fr in vr.get('frame_results', [])), default=0) for vr in video_results)
         
         # Collect all violations
         violations = [
@@ -398,8 +539,7 @@ class PPEDetectionAnalytics:
                 'image_violations': img_violations,
                 'image_compliance_rate': (img_compliant / len(image_results) * 100) if image_results else 0,
                 'total_helmets': total_helmets,
-                'total_heads': total_heads,
-                'total_persons': total_persons
+                'total_heads': total_heads
             },
             'violations': violations,
             'image_results': image_results,
@@ -466,8 +606,7 @@ class PPEDetectionAnalytics:
             # Detection counts
             f.write("DETECTION SUMMARY:\n")
             f.write(f"  Helmets Detected: {s['total_helmets']}\n")
-            f.write(f"  Exposed Heads: {s['total_heads']}\n")
-            f.write(f"  Persons Detected: {s['total_persons']}\n\n")
+            f.write(f"  Exposed Heads: {s['total_heads']}\n\n")
             
             # Violations
             if report['violations']:
@@ -515,7 +654,7 @@ class PPEDetectionAnalytics:
         logger.info(f"\nDetections:")
         logger.info(f"  Helmets: {s['total_helmets']}")
         logger.info(f"  Exposed Heads: {s['total_heads']}")
-        logger.info(f"  Persons: {s['total_persons']}")
+        
         
         # Top violations
         if report['violations']:
@@ -525,19 +664,23 @@ class PPEDetectionAnalytics:
         
         logger.info("="*60)
     
-    def run_complete_pipeline(self, image_dir=None, video_dir=None):
-        """Run complete analytics pipeline"""
+    def run_complete_pipeline(self, input_dir=None, frame_skip=None):
+        """Run complete analytics pipeline processing both images and videos in the input directory"""
         logger.info("="*60)
         logger.info("PPE ANALYTICS PIPELINE")
         logger.info("="*60)
         
+        # Use default input dir if none provided
+        target_dir = input_dir or self.config['input']['base_dir']
+        logger.info(f"Target Directory: {target_dir}")
+        
         # Process images
         logger.info("\nStep 1: Processing images...")
-        self.process_images(image_dir)
+        self.process_images(target_dir)
         
         # Process videos
         logger.info("\nStep 2: Processing videos...")
-        self.process_videos(video_dir)
+        self.process_videos(target_dir, frame_skip=frame_skip)
         
         # Generate and save report
         logger.info("\nStep 3: Generating report...")
@@ -594,38 +737,33 @@ class PPEDetectionAnalytics:
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description='PPE Detection Analytics System')
-    parser.add_argument('--mode', choices=['images', 'videos', 'webcam', 'pipeline', 'all'], 
+    parser.add_argument('--mode', choices=['pipeline', 'webcam'], 
                         default='pipeline', help='Processing mode (default: pipeline)')
-    parser.add_argument('--input', help='Input directory or file path')
-    parser.add_argument('--conf', type=float, default=0.2, help='Confidence threshold')
-    parser.add_argument('--cam', type=int, default=0, help='Camera index for webcam')
+    parser.add_argument('--input', help='Input directory for media processing')
+    parser.add_argument('--model', help='Path to model weights (overrides latest)')
+    parser.add_argument('--conf', type=float, default=None, help='Confidence threshold (default: auto-detected per mode)')
+    parser.add_argument('--skip', type=int, default=1, help='Frame skip count (process every Nth frame)')
+    parser.add_argument('--cam', default='0', help='Camera index or stream URL for webcam (default: 0)')
     parser.add_argument('--duration', type=int, default=30, help='Webcam capture duration (sec)')
     
     args = parser.parse_args()
     
-    analytics = PPEDetectionAnalytics(conf_threshold=args.conf)
+    # Handle numeric camera index vs URL string
+    cam_source = args.cam
+    if args.input and args.mode == 'webcam':
+        cam_source = args.input
     
-    if args.mode == 'images':
-        analytics.process_images(args.input)
-        analytics.save_report()
-        analytics.save_text_report()
-        analytics.print_summary()
-    elif args.mode == 'videos':
-        analytics.process_videos(args.input)
-        analytics.save_report()
-        analytics.save_text_report()
-        analytics.print_summary()
-    elif args.mode == 'webcam':
-        analytics.process_webcam(camera_index=args.cam, duration_seconds=args.duration)
-        analytics.save_report()
-        analytics.save_text_report()
-        analytics.print_summary()
-    elif args.mode == 'all':
-        analytics.process_images(args.input)
-        analytics.process_videos(args.input)
-        analytics.process_webcam(camera_index=args.cam, duration_seconds=args.duration)
+    try:
+        cam_source = int(cam_source)
+    except ValueError:
+        pass # Keep as string if it's a URL
+        
+    analytics = PPEDetectionAnalytics(model_path=args.model, conf_threshold=args.conf)
+    
+    if args.mode == 'webcam':
+        analytics.process_webcam(camera_index=cam_source, duration_seconds=args.duration, frame_skip=args.skip)
         analytics.save_report()
         analytics.save_text_report()
         analytics.print_summary()
     else: # pipeline
-        analytics.run_complete_pipeline(args.input)
+        analytics.run_complete_pipeline(args.input, frame_skip=args.skip)

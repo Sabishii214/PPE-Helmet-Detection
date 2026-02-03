@@ -2,6 +2,8 @@
 Dataset preparation utilities
 Handles data download, conversion, and splitting
 """
+
+
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from sklearn.model_selection import train_test_split
@@ -21,7 +23,13 @@ def download_dataset():
 
 def setup_directories():
     """Create directory structure for train/valid/test splits"""
-    print("Setting up directory structure...")
+    print(f"Setting up directory structure at {OUTPUT_DIR}...")
+    
+    # Clean old dataset to avoid mixed class labels
+    if OUTPUT_DIR.exists():
+        print(f"Cleaning existing directory: {OUTPUT_DIR}")
+        shutil.rmtree(OUTPUT_DIR)
+        
     for split in ['train', 'valid', 'test']:
         (OUTPUT_DIR / split / 'images').mkdir(parents=True, exist_ok=True)
         (OUTPUT_DIR / split / 'labels').mkdir(parents=True, exist_ok=True)
@@ -52,17 +60,7 @@ def copy_raw_data(source_path):
 
 
 def xml_to_yolo(xml_path, img_width, img_height):
-    """
-    Convert XML annotation to YOLO format
-    
-    Args:
-        xml_path: Path to XML annotation file
-        img_width: Image width
-        img_height: Image height
-        
-    Returns:
-        List of YOLO format labels (class x_center y_center width height)
-    """
+    """Convert XML annotation to YOLO format"""
     tree = ET.parse(xml_path)
     labels = []
     
@@ -112,12 +110,7 @@ def split_dataset():
     return splits
 
 def process_and_copy_files(splits):
-    """
-    Process images and annotations, convert to YOLO format, and copy to output directories
-    
-    Args:
-        splits: Dictionary with 'train', 'valid', 'test' keys containing image paths
-    """
+    """Process images and annotations, convert to YOLO format, and copy to output directories"""
     print("\nProcessing and copying files...")
     
     stats = {'train': 0, 'valid': 0, 'test': 0}
@@ -163,15 +156,15 @@ def create_yaml_config():
     """Create YAML configuration file for YOLO training"""
     from config import DATA_YAML
     
+    names_content = "\n".join([f"  {i}: {name}" for i, name in enumerate(CLASSES)])
+    
     yaml_content = f"""path: {OUTPUT_DIR.absolute()}
 train: train/images
 val: valid/images
 test: test/images
 
 names:
-  0: helmet
-  1: head
-  2: person
+{names_content}
 """
     
     Path(DATA_YAML).write_text(yaml_content)

@@ -2,6 +2,8 @@
 Model export and optimization utilities
 Export trained model to different formats
 """
+
+
 import argparse
 import time
 import torch
@@ -107,9 +109,7 @@ def export_model(model_path=None, force=False):
     return results
 
 def benchmark_inference_speed(model_path=None, onnx_path=None, engine_path=None, num_iterations=100):
-    """
-    Benchmark inference speed using GPU
-    """
+    """Benchmark inference speed using GPU"""
     print("\n" + "="*60)
     print("GPU INFERENCE SPEED BENCHMARK")
     print("="*60)
@@ -213,15 +213,7 @@ def benchmark_inference_speed(model_path=None, onnx_path=None, engine_path=None,
 
 def generate_optimization_report(export_paths, benchmark_results, 
                                  output_file=None, model_path=None):
-    """
-    Generate detailed optimization report
-    
-    Args:
-        export_paths: Dictionary of exported model paths
-        benchmark_results: Dictionary of benchmark results
-        output_file: Output file path (if None, saves to model's run directory)
-        model_path: Path to the model (used to determine run directory)
-    """
+    """Generate detailed optimization report"""
     # Determine output path from model path if not specified
     if output_file is None and model_path:
         model_path = Path(model_path)
@@ -288,13 +280,7 @@ def generate_optimization_report(export_paths, benchmark_results,
 
 
 def export_and_optimize(model_path=None, force=False):
-    """
-    Main function to export and optimize model
-    
-    Args:
-        model_path: Path to trained model weights
-        force: Force re-export even if files exist
-    """
+    """Main function to export and optimize model"""
     # Export model
     export_paths = export_model(model_path, force=force)
     
